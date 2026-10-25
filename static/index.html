@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PhotoStats · 照片统计</title>
+<link rel="stylesheet" href="/static/style.css?v=34">
+<script src="/static/echarts.min.js"></script>
+</head>
+<body>
+<header>
+  <div class="brand">📷 PhotoStats</div>
+  <div id="summary" class="summary"></div>
+  <div class="spacer"></div>
+  <input id="searchBox" placeholder="语义搜索:流星雨 / 猫 / sunset…" spellcheck="false">
+  <span id="rescanHint" class="hint"></span>
+  <button id="reportBtn">年报</button>
+  <button id="rescanBtn">重新扫描</button>
+</header>
+
+<nav id="tabs">
+  <button data-tab="overview" class="active">总览</button>
+  <button data-tab="shooting">拍摄参数</button>
+  <button data-tab="time">时间分布</button>
+  <button data-tab="files">文件与存储</button>
+  <button data-tab="subjects">题材统计</button>
+  <button data-tab="persons">人物</button>
+  <button data-tab="colors">色彩</button>
+  <button data-tab="video">视频统计</button>
+  <button data-tab="browse">照片浏览</button>
+</nav>
+
+<div id="filterbar" hidden>
+  <span id="filterLabel"></span>
+  <button id="clearFilter">✕ 清除筛选</button>
+</div>
+
+<main>
+  <section id="tab-overview" class="tab active"></section>
+  <section id="tab-shooting" class="tab"></section>
+  <section id="tab-time" class="tab"></section>
+  <section id="tab-files" class="tab"></section>
+  <section id="tab-subjects" class="tab"></section>
+  <section id="tab-persons" class="tab"></section>
+  <section id="tab-colors" class="tab"></section>
+  <section id="tab-video" class="tab"></section>
+  <section id="tab-browse" class="tab">
+    <div id="panelBar"></div>
+    <div id="grid" class="grid"></div>
+    <div class="more-wrap"><button id="loadMore" hidden>加载更多</button></div>
+  </section>
+</main>
+
+<div id="compareLayer" hidden>
+  <div class="cmp-head"><b>对比视图</b><span class="sub">ESC 退出 · 点击图片移除</span>
+    <button id="cmpClose">✕</button></div>
+  <div id="cmpGrid" class="cmp-grid"></div>
+</div>
+<div id="lightbox" hidden>
+  <button class="lb-close" id="lbClose">✕</button>
+  <button class="lb-nav lb-prev" id="lbPrev">‹</button>
+  <button class="lb-nav lb-next" id="lbNext">›</button>
+  <button class="lb-similar" id="lbSimilar" title="找相似照片">🔍 相似</button>
+  <div class="lb-body">
+    <div id="lbMedia" class="lb-media"></div>
+    <div id="lbInfo" class="lb-info"></div>
+  </div>
+</div>
+
+<script src="/static/app.js?v=34"></script>
+</body>
+</html>

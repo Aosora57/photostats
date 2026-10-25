@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install opencv-python-headless
+      - name: 语法与导入冒烟测试
+        run: |
+          python -m py_compile photostats.py scanner.py server.py classifier.py searcher.py encoders.py quality.py faces.py phash.py xmp.py report.py exporter.py colors.py
+          python -c "import server, searcher, colors, quality; print('imports ok')"
+      - name: 模块功能冒烟(不含模型)
+        run: |
+          python -c "
+          import scanner, phash, quality
+          from pathlib import Path
+          # collect_files 空目录冒烟
+          r = scanner.collect_files(Path('.'), set())
+          print('walk ok:', isinstance(r, tuple))
+          "
+
+  package:
+    needs: test
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            triple: x86_64-pc-windows-msvc
+            py: python.exe
+          - os: macos-latest
+            triple: aarch64-apple-darwin
+            py: bin/python3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 组装绿色分发包
+        run: python scripts/package.py --triple ${{ matrix.triple }}
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: PhotoStats-${{ matrix.triple }}
+          path: dist/
+          retention-days: 14

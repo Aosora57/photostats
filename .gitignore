@@ -1,0 +1,28 @@
+# ---- 用户数据与缓存(绝不上传:含照片路径/GPS/人脸数据) ----
+cache/
+*.log
+
+# ---- 模型与第三方二进制(体积大,由 scripts/download_models.py 下载) ----
+tools/models/
+tools/exiftool.exe
+tools/exiftool_files/
+tools/exiftool(-k).exe
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ---- 构建/打包产物 ----
+dist/
+build/
+*.spec.bak
+ PhotoStats-portable*/
+
+# ---- 系统/编辑器 ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

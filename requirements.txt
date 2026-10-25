@@ -1,0 +1,12 @@
+# 核心依赖(跨平台)
+pillow>=10.0
+numpy>=1.26
+tokenizers>=0.15
+
+# ONNX 推理运行时:Windows 用 DirectML(GPU 加速),其他平台用 CPU 版
+onnxruntime-directml>=1.17; sys_platform == "win32"
+onnxruntime>=1.17; sys_platform != "win32"
+
+# 注意:opencv-python-headless(人脸检测)在检测到已安装人脸功能时才需要,
+# 未安装时其余功能不受影响,可按需安装:
+# opencv-python-headless>=4.9
