@@ -176,6 +176,13 @@
 
 **星级(E1)**:`xmp.set_rating` — ratings.json 为主存储,XMP sidecar Rating 由 exiftool 写入(已有 sidecar 原位更新,缺失则 `-o` 创建连带照片标签)。**闭眼(E7)**:`quality.compute_blink` — 对齐脸眼部区域灰度标准差启发式(实验性,阈值 EYE_STD_OPEN)。**组内最佳(E8)**:`quality.compute_bestpick` — 同场景组内美学分最高者为最佳,低 1.0 分以上为建议删除。
 
+### `selection.py` — 统一选片评分引擎(B4)
+
+综合分 = 0.6×美学 + 4×清晰度归一(log10)+ 0.3×星级 − 闭眼罚 1.5(权重在文件顶部)。
+同场景组(softness.json clusters)内相对排序:组内最佳/同簇偏软(lap<中位×0.6)/建议删除(低于最佳 1.5 分),
+全部附中文理由。`selection.json` 带 sig(嵌入包 + quality/blink mtime)自动失效;
+`compute_blink` 闭眼判据为眼部/全脸相对对比度(阈值 EYE_RATIO_CLOSED=0.25),load_blink 动态派生。
+
 ### `colors.py` — 色彩分析(E10)
 
 64px 缩略图 → PIL HSV → 12 色相 bin(按饱和度 ≥0.12 过滤无彩色)+ 暖/冷/无彩色像素占比 + 主导色族。
@@ -320,6 +327,8 @@ dt_src 存在且为"mtime"表示时间来自文件修改时间
 | GET | `/api/bestpick` | 组内最佳/建议删除(E8,实时计算) |
 | GET | `/api/albums` `/api/albums/save?name=&filters=` `/api/albums/delete?name=` | 智能相册(E2) |
 | POST | `/api/export` | `{ids:[...], maxpx}` → ZIP 附件(E5) |
+| GET | `/api/selection` `/api/selection/rebuild` | 选片评分数据(含组内状态与理由)/ 重算(B4) |
+| GET | `/api/culling` `/api/culling/decide?path=&decision=` | 人工选片决策读取 / 写入(keep/cull/skip) |
 | GET | `/api/colors` `/api/colors/rebuild` | 色彩数据(暖/冷/无彩色/色族)/ 后台计算(E10) |
 | GET | `/api/faces` `/api/faces/rebuild` | 人物列表/进度;后台人脸检测与聚类(B2) |
 | GET | `/api/faceimg?k=` | 人脸对齐裁剪图(cache/face_crops) |
