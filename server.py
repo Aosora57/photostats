@@ -19,6 +19,7 @@ import phash
 import quality
 import report
 import scanner
+import selection
 import searcher
 import xmp
 
@@ -55,6 +56,25 @@ class AppState:
         self.aes_state = aesthetic.AestheticState()
         self.blink_state = quality.SoftState()
         self.color_state = colors.ColorState()
+        self.sel_state = selection.SelectionState()
+
+    def start_selection(self) -> dict:
+        st = self.sel_state
+        snap = st.snapshot()
+        if snap["running"]:
+            return snap
+        st.error = None
+
+        def run():
+            try:
+                selection.compute_selection(st)
+            except Exception as e:
+                with st.lock:
+                    st.error = repr(e)
+                    st.running = False
+
+        threading.Thread(target=run, daemon=True).start()
+        return st.snapshot()
 
     def start_colors(self) -> dict:
         st = self.color_state
@@ -442,6 +462,10 @@ def make_handler(state: AppState):
                     self._send_json(state.start_blink())
                 elif path == "/api/blink":
                     self._send_json(quality.load_blink())
+                elif path == "/api/selection":
+                    self._send_json(selection.load_selection())
+                elif path == "/api/selection/rebuild":
+                    self._send_json(state.start_selection())
                 elif path == "/api/bestpick":
                     self._send_json(quality.compute_bestpick())
                 elif path == "/api/colors/rebuild":
