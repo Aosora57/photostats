@@ -179,3 +179,25 @@ main { padding: 16px 20px 60px; }
 .cmp-cell img { flex: 1; min-height: 0; object-fit: contain; background: #000; border-radius: 6px; }
 .cmp-cell figcaption { color: #aab4c8; font-size: 12px; text-align: center; padding: 6px 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+
+/* 选片工作台(B4) */
+.sel-head h3 { font-size: 18px; }
+.selbtn { border: 1px solid var(--line); background: var(--card); color: var(--text);
+  border-radius: 6px; padding: 4px 12px; cursor: pointer; font-size: 12px; }
+.selbtn:hover { border-color: var(--accent); color: var(--accent); }
+.sel-card .sel-tag { position: absolute; top: 6px; left: 6px; font-size: 11px;
+  padding: 2px 8px; border-radius: 4px; color: #fff; }
+.sel-tag.best { background: rgba(46,160,67,.92); }
+.sel-tag.soft { background: rgba(240,180,41,.92); color: #333; }
+.sel-tag.cull { background: rgba(214,63,63,.92); }
+.sel-tag.keep { background: rgba(46,160,67,.92); }
+.sel-card figcaption { padding: 8px 10px; }
+.sel-score { font-size: 13px; }
+.sel-score b { color: var(--accent); font-size: 16px; }
+.sel-reasons { font-size: 11px; color: var(--muted); margin: 4px 0; min-height: 15px; }
+.sel-actions { display: flex; gap: 6px; margin: 6px 0; }
+.sel-file { font-size: 10.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.sel-card img { height: 220px; }
+#selMembers { margin-top: 10px; }
+.sel-card img { height: 240px; }

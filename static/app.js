@@ -28,6 +28,12 @@ let compareArr = [];       // 对比视图中的路径(E6)
 let colorsMap = new Map(); // 路径 -> {w,c,n,fam,v}(E10)
 let colorSummary = null;   // 色彩汇总(E10)
 let colorMonthly = [];     // 按月暖色占比(E10)
+let selectionData = { items: {}, clusters: [] };  // 选片引擎输出(B4)
+let cullDecisions = new Map();                    // 路径 -> keep/cull/skip
+let selGroups = [];                               // 工作台分组视图
+let selGroupIdx = 0;                              // 当前组
+let selMemberIdx = 0;                             // 当前组成员
+
 function family_color(name) {
   const F = ["红", "橙", "黄", "黄绿", "绿", "青绿", "青", "蓝", "蓝紫", "紫", "品红", "红紫"];
   const C = ["#e53935", "#fb8c00", "#fdd835", "#9ccc65", "#43a047", "#26a69a",
@@ -281,6 +287,11 @@ function match(f) {
       case "best": ok = bestpickBest.has(f.p); break;
       case "cull": ok = bestpickCull.has(f.p); break;
       case "onday": ok = (f.dt || "").slice(5, 10) === v; break;
+      case "decided": {
+        const d = cullDecisions.get(f.p);
+        ok = v === "keep" ? d === "keep" : v === "cull" ? d === "cull" : d === "skip";
+        break;
+      }
       case "colorw": {
         const m = colorsMap.get(f.p);
         if (!m) { ok = false; break; }
@@ -460,7 +471,29 @@ function saveAlbum() {
     .then(d => { albums = d.albums; renderAlbums(); input.value = ""; })
     .catch(e => alert("保存失败:" + e));
 }
-async function loadAlbums() {
+function refreshSelection() { buildSelGroups(); }
+async function loadSelection() {
+  try {
+    const d = await fetch("/api/selection").then(r => r.json());
+    selectionData = { items: d.items || {}, clusters: d.clusters || [] };
+    const c = await fetch("/api/culling").then(r => r.json());
+    cullDecisions = new Map(Object.entries((c && c.decisions) || {}));
+  } catch (e) { console.warn("选片数据加载失败", e); }
+}
+function selInfo(path) {
+  return selectionData.items[path] || null;
+}
+function buildSelGroups() {
+  // 把聚类路径组转成工作台组(成员按综合分降序,附记录)
+  selGroups = (selectionData.clusters || []).map(paths => ({
+    members: paths.map(p => ({ p, rec: pathToFile.get(p), info: selInfo(p) }))
+                   .filter(m => m.rec),
+  })).filter(g => g.members.length >= 2);
+  selGroups.sort((a, b) => b.members.length - a.members.length);
+  selGroupIdx = Math.min(selGroupIdx, Math.max(0, selGroups.length - 1));
+}
+
+async function loadSearchInfo() {
   try {
     const d = await fetch("/api/albums").then(r => r.json());
     albums = d.albums || [];
@@ -593,6 +626,87 @@ async function refreshColorsData() {
     colorMonthly = d.monthly || [];
     return true;
   } catch (e) { console.warn("色彩数据加载失败", e); return false; }
+}
+
+function renderSelectionTab() {
+  const sec = $("#tab-selection");
+  if (!sec.querySelector(".sel-head")) {
+    const head = document.createElement("div");
+    head.className = "sel-head";
+    head.innerHTML = `<h3 style="margin-bottom:4px">选片工作台</h3>
+      <p class="sub">同场景组内对比 · 综合分 = 美学 + 清晰度 − 闭眼罚 + 星级 ·
+      快捷键:← → 切换成员 · [ ] 切换组 · K 保留 · X 删除 · 1-5 评分</p>
+      <p style="margin:8px 0">
+        <button id="selPrev" class="selbtn">◀ 上一组</button>
+        <span id="selPos" style="font-weight:600"></span>
+        <button id="selNext" class="selbtn">下一组 ▶</button>
+        <span id="selDecisionHint" class="sub"></span></p>
+      <div id="selMembers" class="grid" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr))"></div>
+      <p class="sub" id="selEmpty" hidden>没有可对比的组 —— 请先在画质概览计算指标与同簇对比</p>`;
+    sec.appendChild(head);
+    $("#selPrev").addEventListener("click", () => { selGroupIdx = Math.max(0, selGroupIdx - 1); renderSelGroup(); });
+    $("#selNext").addEventListener("click", () => { selGroupIdx = Math.min(selGroups.length - 1, selGroupIdx + 1); renderSelGroup(); });
+    renderSelGroup();
+  } else {
+    renderSelGroup();
+  }
+}
+
+function selDecisionOf(p) { return cullDecisions.get(p) || null; }
+
+function renderSelGroup() {
+  const pos = $("#selPos"), grid = $("#selMembers"), empty = $("#selEmpty");
+  if (!pos) return;
+  if (!selGroups.length) {
+    pos.textContent = "";
+    if (empty) empty.hidden = false;
+    grid.innerHTML = "";
+    return;
+  }
+  if (empty) empty.hidden = true;
+  selGroupIdx = Math.min(Math.max(selGroupIdx, 0), selGroups.length - 1);
+  const g = selGroups[selGroupIdx];
+  pos.textContent = `组 ${selGroupIdx + 1} / ${selGroups.length} · ${g.members.length} 张`;
+  grid.innerHTML = g.members.map((m, i) => {
+    const info = m.info || {};
+    const state = info.state || "ok";
+    const stateTag = { best: '<span class="sel-tag best">组内最佳</span>',
+                       soft: '<span class="sel-tag soft">同簇偏软</span>',
+                       cull: '<span class="sel-tag cull">建议删除</span>' }[state] || "";
+    const dec = selDecisionOf(m.p);
+    const decTag = dec === "keep" ? '<span class="sel-tag keep">✓ 已保留</span>'
+      : dec === "cull" ? '<span class="sel-tag cull">✗ 已标记删除</span>' : "";
+    const reasons = (info.reasons || []).slice(0, 3).join("<br>");
+    return `<figure class="card sel-card" data-path="${m.p}" data-i="${i}">
+      <div style="position:relative">
+        <img src="/api/preview?p=${encodeURIComponent(m.p)}" loading="lazy"
+             onerror="this.src='/api/thumb?p=${encodeURIComponent(m.p)}'">
+        ${stateTag}${decTag}
+      </div>
+      <figcaption>
+        <div class="sel-score">综合分 <b>${info.score ?? "-"}</b></div>
+        <div class="sel-reasons">${reasons}</div>
+        <div class="sel-actions">
+          <button class="selbtn" data-act="keep" data-p="${m.p}">保留 (K)</button>
+          <button class="selbtn" data-act="cull" data-p="${m.p}">删除 (X)</button>
+          <button class="selbtn" data-act="lb" data-p="${m.p}">🔍</button>
+        </div>
+        <div class="sel-file">${m.p.split("/").pop()} · ${fmtSize(m.rec.s)}</div>
+      </figcaption>
+    </figure>`;
+  }).join("");
+}
+
+async function selDecide(p, decision) {
+  cullDecisions.set(p, decision);
+  await fetch(`/api/culling/decide?path=${encodeURIComponent(p)}&decision=${decision}`);
+  renderSelGroup();
+}
+
+async function selRate(p, stars) {
+  ratingsMap.set(p, stars);
+  await fetch(`/api/rating?path=${encodeURIComponent(p)}&stars=${stars}`);
+  renderSelGroup();
 }
 
 function renderColorsTab() {
@@ -1038,6 +1152,7 @@ function renderTab(tab) {
   if (tab === "subjects") renderSubjectsTab(list);
   if (tab === "persons") renderPersonsTab();
   if (tab === "colors") renderColorsTab();
+  if (tab === "selection") { buildSelGroups(); renderSelectionTab(); }
   if (tab === "video") renderVideoCards(list);
 }
 
@@ -1662,6 +1777,7 @@ async function init() {
     }).catch(() => {}),
   ]);
   try { await loadAlbums(); } catch (e) { console.warn("相册加载失败", e); }
+  await loadSelection();
   await refreshColorsData();
   window.setFilter = setFilter; // 供内联 onclick 使用
   refreshAll();
@@ -1715,6 +1831,21 @@ async function init() {
       openCompare();
     }
   });
+  $("#tab-selection").addEventListener("click", e => {
+    const b = e.target.closest("button[data-act]");
+    if (!b) return;
+    const act = b.dataset.act, p = b.dataset.p;
+    if (act === "keep") selDecide(p, "keep");
+    else if (act === "cull") selDecide(p, "cull");
+    else if (act === "lb") {
+      const idx = filteredList.findIndex(f => f.p === p);
+      if (idx < 0) { // 不在当前筛选列表里,构造临时
+        const rec = pathToFile.get(p);
+        if (rec) { filteredList = [rec]; openLb(0); }
+      } else openLb(idx);
+      showTab("browse");
+    }
+  });
   $("#cmpClose").addEventListener("click", closeCompare);
   $("#cmpGrid").addEventListener("click", e => {
     const cell = e.target.closest(".cmp-cell");
@@ -1732,6 +1863,24 @@ async function init() {
   $("#reportBtn").addEventListener("click", () => window.open("/api/report", "_blank"));
   $("#lightbox").addEventListener("click", e => { if (e.target === e.currentTarget) $("#lbClose").click(); });
   document.addEventListener("keydown", e => {
+    if (currentTab === "selection" && !e.target.matches("input,textarea,select")) {
+      const g = selGroups[selGroupIdx];
+      if (!g) return;
+      const m = g.members[selMemberIdx];
+      if (e.key === "ArrowRight") {
+        if (e.altKey || e.ctrlKey) { selGroupIdx = Math.min(selGroups.length - 1, selGroupIdx + 1); renderSelGroup(); }
+        else { selMemberIdx = Math.min(g.members.length - 1, selMemberIdx + 1); }
+        e.preventDefault(); renderSelGroup(); return;
+      }
+      if (e.key === "ArrowLeft") {
+        if (e.altKey || e.ctrlKey) { selGroupIdx = Math.max(0, selGroupIdx - 1); renderSelGroup(); }
+        else { selMemberIdx = Math.max(0, selMemberIdx - 1); }
+        e.preventDefault(); renderSelGroup(); return;
+      }
+      if (m && (e.key === "k" || e.key === "K")) { selDecide(m.p, "keep"); e.preventDefault(); return; }
+      if (m && (e.key === "x" || e.key === "X")) { selDecide(m.p, "cull"); e.preventDefault(); return; }
+      if (m && /^[1-5]$/.test(e.key)) { selRate(m.p, +e.key); e.preventDefault(); return; }
+    }
     if (e.key === "Escape" && !$("#compareLayer").hidden) { closeCompare(); return; }
     if ($("#lightbox").hidden) return;
     if (e.key === "Escape") $("#lbClose").click();

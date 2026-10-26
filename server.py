@@ -463,7 +463,31 @@ def make_handler(state: AppState):
                 elif path == "/api/blink":
                     self._send_json(quality.load_blink())
                 elif path == "/api/selection":
-                    self._send_json(selection.load_selection())
+                    d = selection.load_selection()
+                    soft = quality.load_soft()
+                    d["clusters"] = soft.get("clusters", [])
+                    self._send_json(d)
+                elif path == "/api/culling":
+                    f = Path(__file__).resolve().parent / "cache" / "culling_decisions.json"
+                    try:
+                        self._send_json(json.loads(f.read_text(encoding="utf-8")))
+                    except (FileNotFoundError, json.JSONDecodeError):
+                        self._send_json({"decisions": {}})
+                elif path == "/api/culling/decide":
+                    rel = q.get("path", [""])[0]
+                    decision = q.get("decision", [""])[0]
+                    f = Path(__file__).resolve().parent / "cache" / "culling_decisions.json"
+                    try:
+                        data = json.loads(f.read_text(encoding="utf-8"))
+                    except (FileNotFoundError, json.JSONDecodeError):
+                        data = {"decisions": {}}
+                    if decision in ("keep", "cull", "skip"):
+                        data["decisions"][rel] = decision
+                    else:
+                        data["decisions"].pop(rel, None)
+                    f.parent.mkdir(parents=True, exist_ok=True)
+                    f.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+                    self._send_json(data)
                 elif path == "/api/selection/rebuild":
                     self._send_json(state.start_selection())
                 elif path == "/api/bestpick":
