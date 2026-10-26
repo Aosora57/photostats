@@ -288,7 +288,8 @@ def load_soft() -> dict:
 BLINK_FILE = classifier.CACHE_DIR / "blink.json"
 # ArcFace 模板中两眼中心 (38.3, 51.7) 与 (73.5, 51.5),取 28×16 邻域
 EYE_PATCHES = [(38.3, 51.7), (73.5, 51.5)]
-EYE_STD_OPEN = 13.0  # 眼部灰度标准差低于此 → 疑似闭眼(实验性启发式)
+EYE_STD_OPEN = 13.0        # 绝对阈值(保留兼容字段)
+EYE_RATIO_CLOSED = 0.25    # B4-3:眼部/全脸相对对比度低于此 → 疑似闭眼(全库第 5 百分位附近)
 
 
 def compute_blink(state=None, on_progress=None) -> dict:
@@ -303,6 +304,7 @@ def compute_blink(state=None, on_progress=None) -> dict:
     crop_dir = classifier.CACHE_DIR / "face_crops"
     done_n = 0
     face_std = {}
+    ratio = {}
     total = sum(len(v) for v in faces_data.values())
     if state:
         with state.lock:
@@ -320,6 +322,8 @@ def compute_blink(state=None, on_progress=None) -> dict:
                     patch = g[max(0, y0):y0 + 16, max(0, x0):x0 + 28]
                     stds.append(float(patch.std()))
                 face_std[r["k"]] = round(min(stds), 2)  # 两眼中较低者
+                # B4-3:相对对比度 = 眼部 std ÷ 全脸 std,消除肤色/曝光差异
+                ratio[r["k"]] = round(min(stds) / max(float(g.std()), 1.0), 3)
             except Exception:
                 continue
         done_n += len(recs)
@@ -328,11 +332,11 @@ def compute_blink(state=None, on_progress=None) -> dict:
                 state.done = done_n
         if on_progress:
             on_progress(done_n, total)
-    closed = [k for k, v in face_std.items() if v < EYE_STD_OPEN]
+    closed = [k for k, v in ratio.items() if v < EYE_RATIO_CLOSED]
     photos = {p: any(r["k"] in set(closed) for r in recs)
               for p, recs in faces_data.items()}
-    result = {"faces": face_std, "closed": closed, "photos": photos,
-              "threshold": EYE_STD_OPEN,
+    result = {"faces": face_std, "ratio": ratio, "closed": closed, "photos": photos,
+              "threshold": EYE_RATIO_CLOSED,
               "computedAt": time.strftime("%Y-%m-%d %H:%M:%S")}
     classifier.CACHE_DIR.mkdir(parents=True, exist_ok=True)
     BLINK_FILE.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
@@ -343,12 +347,23 @@ def compute_blink(state=None, on_progress=None) -> dict:
 
 
 def load_blink() -> dict:
-    if BLINK_FILE.exists():
-        try:
-            return json.loads(BLINK_FILE.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            return {}
-    return {}
+    """读取眨眼指标,并按当前阈值动态派生 closed/photos(调整阈值无需重算)。"""
+    if not BLINK_FILE.exists():
+        return {}
+    try:
+        d = json.loads(BLINK_FILE.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    ratio = d.get("ratio", {})
+    if ratio:
+        closed = set(k for k, v in ratio.items() if v < EYE_RATIO_CLOSED)
+        d["closed"] = sorted(closed)
+        d["threshold"] = EYE_RATIO_CLOSED
+        import faces as faces_mod
+        faces_data = faces_mod._load_faces()
+        d["photos"] = {p: any(r["k"] in closed for r in recs)
+                       for p, recs in faces_data.items()}
+    return d
 
 
 # ---------- E8 组内最佳(美学分 + 同簇分组) ----------

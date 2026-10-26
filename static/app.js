@@ -630,6 +630,10 @@ async function refreshColorsData() {
 
 function renderSelectionTab() {
   const sec = $("#tab-selection");
+  // 自愈:init 时偶发的加载失败,进入页签时自动重载一次
+  if (!selectionData.clusters.length) {
+    loadSelection().then(() => { buildSelGroups(); renderSelectionTab(); });
+  }
   if (!sec.querySelector(".sel-head")) {
     const head = document.createElement("div");
     head.className = "sel-head";
